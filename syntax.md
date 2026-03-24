@@ -28,3 +28,29 @@
 > }
 > 
 
+# Using Base Operations
+
+xor-result = a XOR b;
+
+not-result = NOT a;
+
+and-result = a AND b;
+
+or-result = a OR b;
+
+## other operations using base OPs
+
+nand-result = NOT (a AND b);
+
+nor-result = NOT (a OR b);
+
+xnor-result = NOT (a XOR b);
+
+
+# File Imports
+import "filetoimport.gate"
+
+
+# Comments
+
+> //this is a comment, anything after a double slash is a comment.
