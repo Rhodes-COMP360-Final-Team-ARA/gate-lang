@@ -30,3 +30,9 @@ comp fulladder(a:1, b:1, cin:1) {
 }
 ```
 
+## Checkpoint 1 Commitments:
+
+Infrastructure - Have CMake set up, create the code architecture, and setup GitHub processes
+Design - Create the syntax and semantics of the DSL
+Parsing - Have the grammar rules in place to create the ASTs
+
