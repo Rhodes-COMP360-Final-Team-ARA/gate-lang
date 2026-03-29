@@ -38,6 +38,7 @@ FetchContent_MakeAvailable(cpp-peglib)
 
 # --- gate-lang library (everything except the CLI entry point) ---
 add_library(gate_lang STATIC
+  src/Ast.cpp
   src/Compiler.cpp
   src/Parser.cpp
   src/Simulation.cpp

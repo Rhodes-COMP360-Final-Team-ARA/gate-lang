@@ -1,0 +1,14 @@
+// v1 prototype: components only, plain names (no :width), no imports/slices/concat
+comp HalfAdder(a, b) {
+  sum = a XOR b;
+  carry = a AND b;
+  return sum, carry;
+}
+
+comp FullAdder(a, b, cin) {
+  ha1-sum, ha1-carry = HalfAdder(a, b);
+  sum, ha2-carry = HalfAdder(ha1-sum, cin);
+  cout = ha1-carry OR ha2-carry;
+  tricky = NOT (a AND b) XOR cin;
+  return sum, cout;
+}
