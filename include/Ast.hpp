@@ -11,10 +11,8 @@
 
 namespace gate::ast {
 
-// TODO: The define the other substructs
-
 struct Program {
-  std::vector<std::string> components; // Would be a Component type later, string for now
+  std::vector<std::string> tokens;
 };
 
 } // namespace gate::ast

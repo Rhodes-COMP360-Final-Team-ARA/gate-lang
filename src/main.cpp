@@ -44,6 +44,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Put some sort of program printer thing here
+  std::cout << "parse ok: " << program->tokens.size() << " tokens\n";
   return 0;
 }

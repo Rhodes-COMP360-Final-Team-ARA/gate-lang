@@ -1,15 +1,12 @@
 /**
  * File: Parser.cpp
- * Purpose: Minimal GateLang prototype — only `comp` definitions, plain identifiers (no
- * `:width`), booleans + calls + parens. See prototype.md.
+ * Purpose: Minimal parser skeleton — tokenize identifiers with whitespace/comment skipping.
  */
 #include "Parser.hpp"
 
 #include <peglib.h>
 
 #include <any>
-#include <stdexcept>
-#include <utility>
 
 namespace gate {
 
@@ -24,19 +21,21 @@ void attach_actions(peg::parser &parser) {
   parser["program"] = [](const SemanticValues &vs) -> Program {
     Program program;
     for (const auto &cell : vs) {
-      program.components.push_back(std::any_cast<std::string>(cell)); // will be a component type in real one
+      program.tokens.push_back(std::any_cast<std::string>(cell));
     }
     return program;
+  };
+
+  parser["IDENT"] = [](const SemanticValues &vs) -> std::string {
+    return vs.token_to_string();
   };
 }
 
 static constexpr const char *kGrammar = R"(
 # This is a comment
-program      <- component*
-
-component    <- IDENT*
-
-IDENT        <- !KEY < [a-zA-Z_] [a-zA-Z0-9-]* >
+program      <- token*
+token        <- IDENT
+IDENT        <- < [a-zA-Z_] [a-zA-Z0-9-]* >
 
 %whitespace  <- [ \t\r\n]* ('//' (![\n] .)* [ \t\r\n]*)*
 )";
