@@ -72,8 +72,12 @@ struct Comp {
   std::vector<Statement> body;
 };
 
+struct Import {
+  std::string path;
+};
+
 struct Program {
-  std::vector<std::string> imports;
+  std::vector<Import> imports;
   std::vector<Comp> components;
 };
 
