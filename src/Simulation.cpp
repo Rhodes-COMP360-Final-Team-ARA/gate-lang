@@ -30,17 +30,50 @@ std::string to_binary(uint64_t val, int width) {
 /// Topologically sorts the circuit for evaluation. Until Kahn's algorithm is
 /// implemented, returns an empty eval_order (simulate will produce zeros).
 PreparedCircuit prepare(Circuit circuit) {
-  // TODO: Kahn's algorithm.
-  //
-  // 1. Build in-degree count: in_degree[i] = nodes[i].inputs.size().
-  // 2. Build consumers adjacency list: for each node, which nodes read from it?
-  // 3. Seed queue with all nodes where in_degree == 0 (Input nodes).
-  // 4. Process: dequeue → append to eval_order → decrement consumers' in_degree
-  //    → enqueue any that reach zero.
-  // 5. Assert eval_order.size() == nodes.size() (no cycles).
-
   PreparedCircuit pc;
   pc.circuit = std::move(circuit);
+
+  const auto &nodes = pc.circuit.nodes;
+  const size_t n = nodes.size();
+
+  // Kahn's algorithm:
+  // - in_degree[v] counts remaining unmet dependencies for v.
+  // - consumers[u] lists nodes that depend on u.
+  std::vector<size_t> in_degree(n, 0);
+  std::vector<std::vector<size_t>> consumers(n);
+
+  for (size_t v = 0; v < n; ++v) {
+    in_degree[v] = nodes[v].inputs.size();
+    for (size_t u : nodes[v].inputs) {
+      assert(u < n && "node input index out of bounds");
+      consumers[u].push_back(v);
+    }
+  }
+
+  std::queue<size_t> ready;
+  for (size_t v = 0; v < n; ++v) {
+    if (in_degree[v] == 0) ready.push(v);
+  }
+
+  pc.eval_order.clear();
+  pc.eval_order.reserve(n);
+
+  while (!ready.empty()) {
+    const size_t u = ready.front();
+    ready.pop();
+    pc.eval_order.push_back(u);
+
+    for (size_t v : consumers[u]) {
+      assert(in_degree[v] > 0 && "in_degree underflow (corrupt graph?)");
+      --in_degree[v];
+      if (in_degree[v] == 0) ready.push(v);
+    }
+  }
+
+  // If we couldn't process every node, the graph contains a cycle (or a node
+  // depends on a missing input, which would have asserted above).
+  assert(pc.eval_order.size() == n && "circuit contains a cycle");
+
   return pc;
 }
 
