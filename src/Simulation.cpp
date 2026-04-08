@@ -5,11 +5,30 @@
 #include "Simulation.hpp"
 
 #include <cassert>
+#include <cstdint>
 #include <queue>
 #include <sstream>
+#include <string>
+#include <vector>
 
 namespace gate {
 
+namespace {
+
+std::string to_binary(uint64_t val, int width) {
+  std::string result;
+  result.reserve(width);
+  for (int b = width - 1; b >= 0; --b) {
+    result += ((val >> b) & 1) ? '1' : '0';
+  }
+  return result;
+}
+
+} // namespace
+
+// ── prepare ─────────────────────────────────────────────────────────────────
+/// Topologically sorts the circuit for evaluation. Until Kahn's algorithm is
+/// implemented, returns an empty eval_order (simulate will produce zeros).
 PreparedCircuit prepare(Circuit circuit) {
   // TODO: Kahn's algorithm.
   //
@@ -25,31 +44,67 @@ PreparedCircuit prepare(Circuit circuit) {
   return pc;
 }
 
+// ── simulate ────────────────────────────────────────────────────────────────
+/// Evaluates the circuit against concrete input values. Walks eval_order,
+/// computing each gate from its input nodes' values. Returns one uint64_t
+/// per named output.
 std::vector<uint64_t> simulate(const PreparedCircuit &pc,
                                 const std::vector<uint64_t> &inputs) {
-  // TODO: Evaluate the circuit.
-  //
-  // 1. Allocate values buffer: vector<uint64_t>(nodes.size(), 0).
-  // 2. Set input values: values[i] = inputs[i] & mask(width) for i < num_inputs.
-  // 3. Walk pc.eval_order, skip Input nodes:
-  //    - Read input values from values[node.inputs[0]], etc.
-  //    - Compute: Not ~in0, And in0&in1, Or in0|in1, Xor in0^in1.
-  //    - Mask: values[idx] &= (1ULL << width) - 1.
-  // 4. Collect: for each output, push values[output.signal.node].
+  const auto &nodes = pc.circuit.nodes;
+  std::vector<uint64_t> values(nodes.size(), 0);
 
-  (void)pc;
-  (void)inputs;
-  return {};
+  for (size_t i = 0; i < pc.circuit.num_inputs; ++i) {
+    uint64_t raw = (i < inputs.size()) ? inputs[i] : 0;
+    uint64_t mask = (nodes[i].width >= 64) ? ~0ULL : (1ULL << nodes[i].width) - 1;
+    values[i] = raw & mask;
+  }
+
+  for (size_t idx : pc.eval_order) {
+    const Node &node = nodes[idx];
+    if (node.type == GateType::Input) continue;
+
+    uint64_t mask = (node.width >= 64) ? ~0ULL : (1ULL << node.width) - 1;
+
+    switch (node.type) {
+    case GateType::Not:
+      values[idx] = ~values[node.inputs[0]] & mask;
+      break;
+    case GateType::And:
+      values[idx] = (values[node.inputs[0]] & values[node.inputs[1]]) & mask;
+      break;
+    case GateType::Or:
+      values[idx] = (values[node.inputs[0]] | values[node.inputs[1]]) & mask;
+      break;
+    case GateType::Xor:
+      values[idx] = (values[node.inputs[0]] ^ values[node.inputs[1]]) & mask;
+      break;
+    case GateType::Input:
+      break;
+    }
+  }
+
+  std::vector<uint64_t> results;
+  results.reserve(pc.circuit.outputs.size());
+  for (const auto &out : pc.circuit.outputs) {
+    results.push_back(values[out.signal.node]);
+  }
+  return results;
 }
 
+// ── format_outputs ──────────────────────────────────────────────────────────
+/// Pairs each output name with its result value, formatted as decimal with
+/// a binary representation zero-padded to the signal's width.
 std::vector<std::string> format_outputs(const PreparedCircuit &pc,
                                          const std::vector<uint64_t> &results) {
-  // TODO: Pair each result with the corresponding output name.
-  // Return strings like "sum = 1", "cout = 0".
-
-  (void)pc;
-  (void)results;
-  return {};
+  std::vector<std::string> lines;
+  lines.reserve(pc.circuit.outputs.size());
+  for (size_t i = 0; i < pc.circuit.outputs.size() && i < results.size(); ++i) {
+    const auto &out = pc.circuit.outputs[i];
+    std::ostringstream ss;
+    ss << out.name << " = " << results[i] << " (0b" << to_binary(results[i], out.signal.width) << ")";
+    lines.push_back(ss.str());
+  }
+  return lines;
 }
 
 } // namespace gate

@@ -40,6 +40,7 @@ FetchContent_MakeAvailable(cpp-peglib)
 add_library(gate_lang STATIC
   src/Compiler.cpp
   src/Parser.cpp
+  src/Repl.cpp
   src/Simulation.cpp
 )
 

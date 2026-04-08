@@ -1,8 +1,9 @@
 /**
  * File: main.cpp
- * Purpose: CLI entry — load a `.gate` file (prototype syntax), parse, print AST to stdout.
+ * Purpose: CLI entry — load a `.gate` file, parse it, and launch the REPL.
  */
 #include "Parser.hpp"
+#include "Repl.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -37,13 +38,12 @@ int main(int argc, char **argv) {
   auto program = gate::parse_program(source, path, &err);
   if (!program) {
     std::cerr << "parse error";
-    if (!err.empty()) {
-      std::cerr << ": " << err;
-    }
+    if (!err.empty()) std::cerr << ": " << err;
     std::cerr << '\n';
     return 1;
   }
 
-  std::cout << "parse ok: " << program->components.size() << " components\n";
+  gate::Repl repl(*program);
+  repl.run();
   return 0;
 }
