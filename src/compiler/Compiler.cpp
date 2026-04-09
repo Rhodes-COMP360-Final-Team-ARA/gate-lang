@@ -97,6 +97,8 @@ public:
   /// Compiles it (and any transitive dependencies) on first request.
   const Circuit &compile_or_get(const std::string &name);
 
+  const ComponentRegistry &registry() const { return registry_; }
+
 private:
   const ComponentRegistry &registry_;
   std::unordered_map<std::string, Circuit> cache_;
@@ -177,7 +179,8 @@ void ComponentCompiler::compile_top_level(const ast::Comp &comp) {
 void ComponentCompiler::compile_body(
     const std::vector<ast::Statement> &body) {
   for (const auto &stmt : body) {
-    // TODO: Reject statements after return (check has_returned_)
+    if (has_returned_) break; // Don't accept anything done after a return
+    // TODO: This would be a great first thing if we add warnings
 
     std::visit(overload{
       [this](const ast::InitAssign &s)  { handle_init(s); },
@@ -189,50 +192,90 @@ void ComponentCompiler::compile_body(
 }
 
 void ComponentCompiler::handle_init(const ast::InitAssign &stmt) {
-  // TODO: Port from old Compiler.cpp handle_init
-  // 1. compile_expr(stmt.value)
-  // 2. validate width matches stmt.target.width
-  // 3. symbols_.define(stmt.target.ident, sig)
-  (void)stmt;
+  Signal sig = compile_expr(stmt.value);
+
+  if (sig.width != stmt.target.width)
+    throw WidthMismatchError("declaration of '" + stmt.target.ident + "'",
+                             stmt.target.width, sig.width);
+
+  symbols_.define(stmt.target.ident, sig);
 }
 
 void ComponentCompiler::handle_mutation(const ast::MutAssign &stmt) {
-  // TODO: Port from old Compiler.cpp handle_mutation
-  // 1. symbols_.resolve(stmt.target) to get current width
-  // 2. compile_expr(stmt.value)
-  // 3. validate width matches
-  // 4. symbols_.update(stmt.target, sig)
-  (void)stmt;
+  int expected_width = symbols_.resolve(stmt.target).width;
+  Signal sig = compile_expr(stmt.value);
+
+  if (sig.width != expected_width)
+    throw WidthMismatchError("assignment to '" + stmt.target + "'",
+                             expected_width, sig.width);
+
+  symbols_.update(stmt.target, sig);
 }
 
 void ComponentCompiler::handle_comp_call(const ast::CompCall &stmt) {
-  // TODO: Port from old Compiler.cpp handle_comp_call
-  // Key difference from old code: instead of creating a child
-  // ComponentCompiler, this now:
-  //   1. Resolve argument signals from symbols_
-  //   2. Validate arity and widths against callee's AST params
-  //   3. const Circuit& callee = session_.compile_or_get(stmt.comp)
-  //   4. auto outputs = inline_circuit(circuit_, callee, arg_signals)
-  //   5. Validate output count and widths, define output symbols
-  (void)stmt;
+  std::vector<Signal> args;
+  for (const auto &arg : stmt.args)
+    args.push_back(symbols_.resolve(arg));
+
+  const ast::Comp &callee_ast = session_.registry().lookup(stmt.comp);
+
+  if (args.size() != callee_ast.params.size())
+    throw ArityMismatchError("'" + stmt.comp + "' arguments",
+                             callee_ast.params.size(), args.size());
+
+  for (size_t i = 0; i < args.size(); ++i) {
+    if (args[i].width != callee_ast.params[i].width)
+      throw WidthMismatchError("'" + stmt.comp + "' argument '" +
+                                   callee_ast.params[i].ident + "'",
+                               callee_ast.params[i].width, args[i].width);
+  }
+
+  const Circuit &callee = session_.compile_or_get(stmt.comp);
+  std::vector<Signal> outputs = inline_circuit(circuit_, callee, args);
+
+  if (stmt.outputs.size() != outputs.size())
+    throw ArityMismatchError("'" + stmt.comp + "' outputs",
+                             outputs.size(), stmt.outputs.size());
+
+  for (size_t i = 0; i < outputs.size(); ++i) {
+    if (stmt.outputs[i].width != outputs[i].width)
+      throw WidthMismatchError("'" + stmt.comp + "' output '" +
+                                   stmt.outputs[i].ident + "'",
+                               outputs[i].width, stmt.outputs[i].width);
+
+    symbols_.define(stmt.outputs[i].ident, outputs[i]);
+  }
 }
 
 void ComponentCompiler::handle_return(const ast::ReturnStmt &stmt) {
-  // TODO: Port from old Compiler.cpp handle_return
-  // For each name in stmt.names:
-  //   Signal sig = symbols_.resolve(name)
-  //   return_signals_.push_back(NamedSignal{name, sig})
-  // Set has_returned_ = true
-  (void)stmt;
+  for (const auto &name : stmt.names) {
+    Signal sig = symbols_.resolve(name);
+    return_signals_.push_back(NamedSignal{name, sig});
+  }
+  has_returned_ = true;
 }
 
 Signal ComponentCompiler::compile_expr(const ast::Expr &expr) {
-  // TODO: Port from old Compiler.cpp compile_expr
-  // - string variant  -> symbols_.resolve(ident)
-  // - UnaryExpr       -> compile operand, add Not node
-  // - BinExpr         -> compile both sides, validate widths match, add gate node
-  (void)expr;
-  throw CompileError("compile_expr not yet ported");
+  if (const auto *ident = std::get_if<std::string>(&expr.data)) {
+    return symbols_.resolve(*ident);
+  }
+
+  if (const auto *unary = std::get_if<ast::UnaryExpr>(&expr.data)) {
+    Signal operand = compile_expr(*unary->operand);
+    return circuit_.add_node(GateType::Not, {operand.node}, operand.width);
+  }
+
+  if (const auto *bin = std::get_if<ast::BinExpr>(&expr.data)) {
+    Signal lhs = compile_expr(*bin->lhs);
+    Signal rhs = compile_expr(*bin->rhs);
+
+    if (lhs.width != rhs.width)
+      throw WidthMismatchError("binary operands", lhs.width, rhs.width);
+
+    return circuit_.add_node(binop_to_gatetype(bin->op), {lhs.node, rhs.node}, lhs.width);
+  }
+
+  throw CompileError("unhandled expression variant");
 }
 
 } // namespace

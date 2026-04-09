@@ -34,6 +34,11 @@ public:
     return map_.count(name) > 0;
   }
 
+  bool empty() const { return map_.empty(); }
+
+  auto begin() const { return map_.begin(); }
+  auto end() const { return map_.end(); }
+
 private:
   std::unordered_map<std::string, ast::Comp> map_;
 };
