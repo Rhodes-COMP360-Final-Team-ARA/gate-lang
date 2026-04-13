@@ -121,47 +121,31 @@ import "adders.gate"
 
 ## Architecture
 
-The pipeline has four stages, each producing a distinct type:
+The pipeline is moving toward a `.gateo`-centric model:
 
 ```
 Source (.gate)
   │  parse_program()
   ▼
 ast::Program          — syntax tree: components, statements, expressions
-  │  compile_component()
+  │  Compiler::get_comp()
   ▼
-Circuit               — flat graph of primitive gate nodes (immutable)
-  │  prepare()
+gate::GateObject      — flat gateo.v2 view (same shape as a .gateo file)
+  │  (simulation TBD from GateObject)
   ▼
-PreparedCircuit       — circuit + topological eval order (cacheable)
-  │  simulate()
-  ▼
-vector<uint64_t>      — output bit values
+vector<uint64_t>      — output bit values (once sim is ported)
 ```
 
-**Circuit** is the compiler's output — a flat, immutable graph where every
-sub-component call has been inlined into primitive gates. It carries no
-simulation state.
+**Compiler** resolves a component name from an in-memory cache, future
+precompiled `.gateo` search paths, or the AST. Version `{0,0}` marks an
+in-progress compile for cycle detection; a stamped version marks completion.
 
-**PreparedCircuit** adds a topological evaluation order (Kahn's algorithm).
-The REPL caches these by component name. It is also the input for a future
-compile-to-binary codegen path.
+**Statement lowering** is split under `src/compiler/statement/` (`init`,
+`mutation`, `comp_call`, `return_stmt`), driven by `compile_statement` and
+`CompileContext`.
 
-**simulate** is a stateless free function: given a prepared circuit and input
-values, it walks the evaluation order, computes each gate, and returns output
-values. No mutable state, no side effects.
-
-### Compiler Internals
-
-The compiler uses a `ComponentCompiler` class (internal to `Compiler.cpp`) that
-represents one compilation scope. Inlining a component call creates a child
-`ComponentCompiler` that shares the same `Circuit` being built but has its own
-symbol table. Two entry points handle the top-level vs. inlined distinction:
-
-- `compile_top_level` — creates input nodes, compiles the body, populates
-  `circuit.outputs` from the return statement.
-- `compile_inline` — binds argument signals to parameters, compiles the body,
-  returns output signals to the caller for binding.
+**Circuit / PreparedCircuit** remain in the tree for legacy simulation until
+that path reads `GateObject` instead.
 
 ### Error Handling
 
@@ -173,15 +157,14 @@ message. Source location support is planned but not yet wired through the AST.
 
 ```
 include/
-  Ast.hpp           — AST types: Program, Comp, Statement, Expr
-  Circuit.hpp       — GateType, Node, Signal, Circuit, PreparedCircuit
-  Compiler.hpp      — compile_component, build_registry
-  Error.hpp         — CompileError, ErrorReporter
+  compiler/         — Compiler, CompileContext, statements, InlineGateo, …
+  core/Ast.hpp      — Program, Comp, Statement, Expr
+  core/Circuit.hpp  — legacy graph types (simulation)
   Parser.hpp        — parse_program
   Repl.hpp          — interactive REPL
-  Simulation.hpp    — prepare, simulate, format_outputs
+  simulation/       — PreparedCircuit, prepare, simulate
 src/
-  Compiler.cpp      — ComponentCompiler class, AST → Circuit compilation
+  compiler/         — get_comp, compile_component, statement/*.cpp
   Parser.cpp        — PEG grammar + semantic actions (cpp-peglib)
   Repl.cpp          — command loop, input parsing, run execution
   Simulation.cpp    — Kahn's algorithm, gate evaluation loop
