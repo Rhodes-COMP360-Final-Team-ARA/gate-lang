@@ -96,25 +96,6 @@ void attach_actions(peg::parser &pg) {
   };
 
 
-  pg["expr"] = [](const SemanticValues &vs) -> ast::Expr {
-  return std::any_cast<ast::Expr>(vs[0]);
-  };
-
-  pg["shift_op"] = [](const SemanticValues &vs) -> ast::ShiftDir {
-  switch (vs.choice()) {
-  case 0:  return ast::ShiftDir::Left;
-  default: return ast::ShiftDir::Right;
-  }
-  };
-
-  pg["shiftexpr"] = [](const SemanticValues &vs) -> ast::Expr {
-  return ast::Expr{ast::ShiftExpr{
-    std::make_shared<ast::Expr>(std::any_cast<ast::Expr>(vs[0])),
-    std::any_cast<ast::ShiftDir>(vs[1]),
-    std::any_cast<int>(vs[2]),
-  }};
-  };
-
 
   // binexpr <- unary (bin_operator unary)*
   //
@@ -125,7 +106,7 @@ void attach_actions(peg::parser &pg) {
   //   step 0: acc = Expr("a")
   //   step 1: acc = BinExpr(acc, AND, Expr("b"))
   //   step 2: acc = BinExpr(acc, OR,  Expr("c"))
-  pg["binexpr"] = [](const SemanticValues &vs) -> ast::Expr {
+  pg["expr"] = [](const SemanticValues &vs) -> ast::Expr {
     auto acc = std::any_cast<ast::Expr>(vs[0]);
 
     for (size_t i = 1; i < vs.size(); i += 2) {
@@ -253,9 +234,7 @@ static constexpr const char *kGrammar = R"(
   mutation      <- IDENT '=' expr ';'
   return_stmt   <- 'return' IDENT (',' IDENT)* ';'
 
-  expr          <- binexpr / shiftexpr
-  binexpr       <- unary (bin_operator unary)*
-  shift         <- binexpr shiftop INT
+  expr          <- unary (bin_operator unary)*
   shiftop       <- 'LSL' / 'LSR'
   unary         <- 'NOT' unary / atom
   atom          <- '(' expr ')' / IDENT
