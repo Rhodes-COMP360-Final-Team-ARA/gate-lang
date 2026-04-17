@@ -254,8 +254,13 @@ static constexpr const char *kGrammar = R"(
   return_stmt   <- 'return' IDENT (',' IDENT)* ';'
 
   expr          <- unary (bin_operator unary)*
+<<<<<<< HEAD
   shift_op       <- 'LSL' / 'LSR'
   unary         <- 'NOT' unary / shiftop INT unary / atom
+=======
+  shiftop       <- 'LSL' / 'LSR'
+  unary         <- 'NOT' unary / atom / shift_op INT unary
+>>>>>>> 4fdfe1d (should work with PEG)
   atom          <- '(' expr ')' / IDENT
   bin_operator  <- 'AND' / 'OR' / 'XOR'
 
