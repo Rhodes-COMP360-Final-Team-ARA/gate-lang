@@ -255,15 +255,16 @@ static constexpr const char *kGrammar = R"(
   return_stmt   <- 'return' IDENT (',' IDENT)* ';'
 
   expr          <- unary (bin_operator unary)*
-  shift_op       <- 'LSL' / 'LSR'
+  shift_op      <- 'LSL' / 'LSR'
   unary         <- 'NOT' unary / shift_op INT unary / atom
-  atom          <- '(' expr ')' / IDENT
+  atom          <- '(' expr ')' / LITERAL / IDENT
   bin_operator  <- 'AND' / 'OR' / 'XOR'
 
   comp_outputs  <- var_init (',' var_init)*
   arg_list      <- (IDENT (',' IDENT)*)?
   var_init      <- IDENT ':' INT
 
+  LITERAL       <- < '0b' [0-1]+ >
   IDENT         <- < [a-zA-Z_] [a-zA-Z0-9_-]* >
   INT           <- < [0-9]+ >
 
