@@ -1,8 +1,6 @@
 # V3 TODO List
 
 We are implementing:
-**Registers**:
-Add a `reg` keyword in front of a variable initialization. Simulation behavior is that it maintains the same output for the whole clock cycle, and then switches to the new input at the end of the clock run
 
 **Splitters**:
 Being able to do `a[0:4]` creates a node that outputs the first 4 bits. IMPORTANT: We are doing MOST to LEAST significant bits, so that it reads like an array where `a=0b010011` and `a[0:4] = 0b0100`.
