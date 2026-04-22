@@ -91,7 +91,7 @@ void attach_actions(peg::parser &pg) {
     }
   };
 
-  // unary <- 'NOT' unary / atom
+  // unary  <- 'NOT' unary / shift_op INT unary / atom
   // choice 0: the 'NOT' literal is invisible, vs[0] is the inner Expr.
   // choice 1: pass through the atom.
   pg["unary"] = [](const SemanticValues &vs) -> ast::Expr {
