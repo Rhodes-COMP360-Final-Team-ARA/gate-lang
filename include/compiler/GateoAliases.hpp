@@ -5,14 +5,14 @@
  */
 #pragma once
 
-#include "gateo/v2/view.hpp"
+#include "gateo/v3/view.hpp"
 
 namespace gate {
 
-using GateObject = gateo::v2::view::GateObject;
-using Node = gateo::v2::view::Node;
-using GateType = gateo::v2::view::GateType;
-using GateVersion = gateo::v2::view::Version;
-using ComponentInstance = gateo::v2::view::ComponentInstance;
+using GateObject = gateo::v3::view::GateObject;
+using Node = gateo::v3::view::Node;
+using GateType = gateo::v3::view::GateType;
+using GateVersion = gateo::v3::view::Version;
+using ComponentInstance = gateo::v3::view::ComponentInstance;
 
 } // namespace gate
