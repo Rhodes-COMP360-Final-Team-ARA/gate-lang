@@ -80,16 +80,19 @@ void attach_actions(peg::parser &pg) {
 
  // atom <- '(' expr ')' / merge_expr / LITERAL / IDENT
  // choice 0: parenthesized — unwrap
- // choice 1: merge_expr — already an Expr, pass through
- // choice 2: literal — wrap the uint32 value in an Expr
- // choice 3: identifier — wrap the string in an Expr
+ // choice 1: splitter
+ // choice 2: merge_expr — already an Expr, pass through
+ // choice 3: literal — wrap the uint32 value in an Expr
+ // choice 4: identifier — wrap the string in an Expr
  pg["atom"] = [](const SemanticValues &vs) -> ast::Expr {
     switch (vs.choice()) {
     case 0:
         return std::any_cast<ast::Expr>(vs[0]);
     case 1:
-        return std::any_cast<ast::Expr>(vs[0]);  // merge_expr already returns Expr
+      return std::any_cast<ast::Expr>(vs[0]);
     case 2:
+        return std::any_cast<ast::Expr>(vs[0]);  // merge_expr already returns Expr
+    case 3:
         return ast::Expr{ast::Literal{static_cast<std::uint64_t>(std::any_cast<std::uint32_t>(vs[0]))}};
     default:
         return ast::Expr{ast::VarRef{std::any_cast<std::string>(vs[0])}};
@@ -137,6 +140,15 @@ void attach_actions(peg::parser &pg) {
       return ast::Expr{ast::MergeExpr{std::move(parts)}};
   };
 
+  // split_expr <- '[' expr ':' INT (',' INT)* ']'
+  // vs[0] = Expr (the source), vs[1..] = INT widths
+  pg["split_expr"] = [](const SemanticValues &vs) -> ast::Expr {
+    auto source = std::make_shared<ast::Expr>(std::any_cast<ast::Expr>(vs[0]));
+    std::vector<uint32_t> widths;
+    for (size_t i = 1; i < vs.size(); ++i)
+        widths.push_back(static_cast<uint32_t>(std::any_cast<int>(vs[i])));
+    return ast::Expr{ast::SplitExpr{std::move(source), std::move(widths)}};
+  };
 
   // Implements left-associative parsing for binary logic operations.
   // vs[0] is the base expression, followed by pairs of [op_index, rhs_expression].
@@ -273,7 +285,7 @@ static constexpr const char *kGrammar = R"(
   expr          <- shift_expr (bin_operator shift_expr)*
   shift_expr    <- unary (shift_op INT)*
   unary         <- 'NOT' unary / atom
-  atom          <- '(' expr ')' / merge_expr / LITERAL / IDENT
+  atom          <- '(' expr ')' / split_expr / merge_expr / LITERAL / IDENT
   merge_expr    <- '{' expr (',' expr)+ '}'
 
   bin_operator  <- 'AND' / 'OR' / 'XOR'
