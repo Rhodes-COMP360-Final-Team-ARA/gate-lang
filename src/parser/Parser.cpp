@@ -25,7 +25,6 @@ void attach_actions(peg::parser &pg) {
    * Notes for understanding how this stuff works:
    *  - Everything is a lambda that tells the parser how to deal with certain rules in the grammar
    *  - Things with multiple parts are array based, so with IDENT ':' INT, you'd reference IDENT with vs[0] and INT with vs[1]
-   *  - 
    */
 
   // ----- Helpers to translate basic types -----
@@ -61,22 +60,22 @@ void attach_actions(peg::parser &pg) {
 
   // -- Expressions --
 
-  // bin_operator <- 'AND' / 'OR' / 'XOR'
+  // bin_operator  <- 'AND' / 'OR' / 'XOR'
   // vs.choice() returns which alternative matched (0, 1, or 2).
-  pg["bin_operator"] = [](const SemanticValues &vs) -> ast::BinOp {
+  pg["bin_operator"] = [](const SemanticValues &vs) -> parser::BinOp {
     switch (vs.choice()) {
-    case 0: return ast::BinOp::And;
-    case 1: return ast::BinOp::Or;
-    default: return ast::BinOp::Xor;
+    case 0: return parser::BinOp::And;
+    case 1: return parser::BinOp::Or;
+    default: return parser::BinOp::Xor;
     }
   };
 
   // shift_op <- 'LSL' / 'LSR'
   // vs.choice returns which alternative matched (0, or 1)
-  pg["shift_op"] = [](const SemanticValues &vs) -> ast::ShiftDir {
+  pg["shift_op"] = [](const SemanticValues &vs) -> parser::ShiftDir {
    switch (vs.choice()) {
-   case 0:  return ast::ShiftDir::Left;
-   default: return ast::ShiftDir::Right;
+   case 0:  return parser::ShiftDir::Left;
+   default: return parser::ShiftDir::Right;
    }
   };
 
