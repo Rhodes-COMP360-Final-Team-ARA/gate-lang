@@ -1,6 +1,8 @@
 /**
  * File: Parser.cpp
- * Purpose: Minimal parser skeleton — tokenize identifiers with whitespace/comment skipping.
+ * Purpose: GateLang PEG grammar (kGrammar) and peglib semantic actions.
+ *
+ * Parser design, precedence chain, and extension notes: src/parser/PARSER.md
  */
 #include "parser/Parser.hpp"
 #include "parser/Ast.hpp"
@@ -254,11 +256,14 @@ static constexpr const char *kGrammar = R"(
   mutation      <- IDENT '=' expr ';'
   return_stmt   <- 'return' IDENT (',' IDENT)* ';'
 
-  expr          <- unary (bin_operator unary)*
-  shift_op      <- 'LSL' / 'LSR'
-  unary         <- 'NOT' unary / shift_op INT unary / atom
-  atom          <- '(' expr ')' / LITERAL / IDENT
+  expr          <- shift_expr (bin_operator shift_expr)*
+  shift_expr    <- unary (shift_op INT)*
+  unary         <- 'NOT' unary / atom
+  atom          <- '(' expr ')' / merge_expr / LITERAL / IDENT
+  merge_expr    <- '{' expr (',' expr)+ '}'
+
   bin_operator  <- 'AND' / 'OR' / 'XOR'
+  shift_op      <- '<<' / '>>'
 
   comp_outputs  <- var_init (',' var_init)*
   arg_list      <- (IDENT (',' IDENT)*)?
