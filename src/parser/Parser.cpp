@@ -79,29 +79,38 @@ void attach_actions(peg::parser &pg) {
   };
 
  // atom <- '(' expr ')' / merge_expr / LITERAL / IDENT
- // choice 0: parenthesized — unwrap
- // choice 1: splitter
- // choice 2: merge_expr — already an Expr, pass through
- // choice 3: literal — wrap the uint32 value in an Expr
- // choice 4: identifier — wrap the string in an Expr
+ // choice 0: parenthesized — unwrap the inner Expr
+ // choice 1: merge_expr — already an Expr, pass through
+ // choice 2: literal — wrap the uint32 value in an Expr
+ // choice 3: identifier — wrap the string in an Expr
  pg["atom"] = [](const SemanticValues &vs) -> ast::Expr {
     switch (vs.choice()) {
     case 0:
         return std::any_cast<ast::Expr>(vs[0]);
     case 1:
-      return std::any_cast<ast::Expr>(vs[0]);
-    case 2:
         return std::any_cast<ast::Expr>(vs[0]);  // merge_expr already returns Expr
-    case 3:
+    case 2:
         return ast::Expr{ast::Literal{static_cast<std::uint64_t>(std::any_cast<std::uint32_t>(vs[0]))}};
     default:
         return ast::Expr{ast::VarRef{std::any_cast<std::string>(vs[0])}};
     }
  };
 
-  // unary <- 'NOT' unary / atom
+ // postfix <- atom ('[' INT ':' INT ']')?
+ // vs[0]         = Expr from atom (always present)
+ // vs[1], vs[2]  = INT lo, INT hi (only when the slice suffix matched)
+ pg["postfix"] = [](const SemanticValues &vs) -> ast::Expr {
+    auto base = std::any_cast<ast::Expr>(vs[0]);
+    if (vs.size() == 1)
+        return base;
+    int lo = std::any_cast<int>(vs[1]);
+    int hi = std::any_cast<int>(vs[2]);
+    return ast::Expr{ast::SplitExpr{std::make_shared<ast::Expr>(std::move(base)), lo, hi}};
+ };
+
+  // unary <- 'NOT' unary / postfix
   // choice 0: the 'NOT' literal is invisible, vs[0] is the inner Expr.
-  // choice 1: pass through the atom.
+  // choice 1: pass through postfix.
   pg["unary"] = [](const SemanticValues &vs) -> ast::Expr {
     switch (vs.choice()) {
     case 0: {
@@ -140,16 +149,6 @@ void attach_actions(peg::parser &pg) {
       return ast::Expr{ast::MergeExpr{std::move(parts)}};
   };
 
-  // split_expr <- '[' expr ':' INT (',' INT)* ']'
-  // vs[0] = Expr (the source), vs[1..] = INT widths
-  pg["split_expr"] = [](const SemanticValues &vs) -> ast::Expr {
-    auto source = std::make_shared<ast::Expr>(std::any_cast<ast::Expr>(vs[0]));
-    std::vector<uint32_t> widths;
-    for (size_t i = 1; i < vs.size(); ++i)
-        widths.push_back(static_cast<uint32_t>(std::any_cast<int>(vs[i])));
-    return ast::Expr{ast::SplitExpr{std::move(source), std::move(widths)}};
-  };
-
   // Implements left-associative parsing for binary logic operations.
   // vs[0] is the base expression, followed by pairs of [op_index, rhs_expression].
   pg["expr"] = [](const SemanticValues &vs) -> ast::Expr {
@@ -175,9 +174,9 @@ void attach_actions(peg::parser &pg) {
     return vs.transform<ast::VarInit>();
   };
 
-  // Aggregates comma-separated IDENT strings into a vector for function arguments.
-  pg["arg_list"] = [](const SemanticValues &vs) -> std::vector<std::string> {
-    return vs.transform<std::string>();
+  // Aggregates comma-separated expr values into a vector for function arguments.
+  pg["arg_list"] = [](const SemanticValues &vs) -> std::vector<ast::Expr> {
+    return vs.transform<ast::Expr>();
   };
 
   // Flattens individual statement nodes into a single vector for the block body.
@@ -228,7 +227,7 @@ void attach_actions(peg::parser &pg) {
     return ast::CompCall {
       std::any_cast<std::vector<ast::VarInit>>(vs[0]),
       std::any_cast<std::string>(vs[1]),
-      std::any_cast<std::vector<std::string>>(vs[2])
+      std::any_cast<std::vector<ast::Expr>>(vs[2])
     };
   };
 
@@ -284,15 +283,16 @@ static constexpr const char *kGrammar = R"(
 
   expr          <- shift_expr (bin_operator shift_expr)*
   shift_expr    <- unary (shift_op INT)*
-  unary         <- 'NOT' unary / atom
-  atom          <- '(' expr ')' / split_expr / merge_expr / LITERAL / IDENT
+  unary         <- 'NOT' unary / postfix
+  postfix       <- atom ('[' INT ':' INT ']')?
+  atom          <- '(' expr ')' / merge_expr / LITERAL / IDENT
   merge_expr    <- '{' expr (',' expr)+ '}'
 
   bin_operator  <- 'AND' / 'OR' / 'XOR'
   shift_op      <- '<<' / '>>'
 
   comp_outputs  <- var_init (',' var_init)*
-  arg_list      <- (IDENT (',' IDENT)*)?
+  arg_list      <- (expr (',' expr)*)?
   var_init      <- IDENT ':' INT
 
   LITERAL       <- < '0b' [0-1]+ >

@@ -28,6 +28,7 @@ struct Literal { uint64_t bits; };
 
 // Unary Expressions
 struct NotExpr { std::shared_ptr<Expr> operand; };
+struct SplitExpr { std::shared_ptr<Expr> operand; int lo; int hi; };
 
 // Binary Expressions
 struct LeftShift  { std::shared_ptr<Expr> operand; std::shared_ptr<Expr> shift_amount; };
@@ -41,7 +42,7 @@ struct MergeExpr  { std::vector<std::shared_ptr<Expr>> operands; };
 
 // Actual EXPR splitter
 struct Expr {
-  std::variant<VarRef, Literal, NotExpr, LeftShift, RightShift, AndExpr, OrExpr, XorExpr, MergeExpr> data;
+  std::variant<VarRef, Literal, NotExpr, SplitExpr, LeftShift, RightShift, AndExpr, OrExpr, XorExpr, MergeExpr> data;
 };
 
 // ── Assignments ─────────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ struct MutAssign {
 struct CompCall {
   std::vector<VarInit> outputs;
   std::string comp;
-  std::vector<std::string> args;
+  std::vector<Expr> args;
 };
 
 // ── Statements ──────────────────────────────────────────────────────────────

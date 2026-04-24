@@ -96,6 +96,34 @@ std::uint32_t compile_binary(GateType type,
   return emitter.emit_node(node);
 }
 
+std::uint32_t compile_split(const ast::SplitExpr &expr,
+                            const SymbolTable &symbols,
+                            NodeEmitter &emitter,
+                            std::uint32_t parent_component) {
+  if (expr.lo < 0 || expr.hi <= expr.lo)
+    throw CompileError("split range [" + std::to_string(expr.lo) + "," +
+                       std::to_string(expr.hi) + ") is invalid");
+
+  std::uint32_t operand = compile_expr(*expr.operand, symbols, emitter, parent_component);
+
+  std::uint32_t source_width = emitter.node_at(operand).width;
+  if (static_cast<std::uint32_t>(expr.hi) > source_width)
+    throw WidthMismatchError("split upper bound", static_cast<int>(source_width), expr.hi);
+
+  std::uint32_t width = static_cast<std::uint32_t>(expr.hi - expr.lo);
+
+  Node node;
+  node.type     = GateType::Split;
+  node.inputs   = {operand};
+  node.width    = width;
+  node.parent   = parent_component;
+  node.name     = std::nullopt;
+  node.value    = std::nullopt;
+  node.split_lo = static_cast<std::uint32_t>(expr.lo);
+
+  return emitter.emit_node(node);
+}
+
 std::uint32_t compile_merge(const ast::MergeExpr &expr,
                             const SymbolTable &symbols,
                             NodeEmitter &emitter,
@@ -107,6 +135,8 @@ std::uint32_t compile_merge(const ast::MergeExpr &expr,
   for (const auto &operand : expr.operands) {
     std::uint32_t idx = compile_expr(*operand, symbols, emitter, parent_component);
     total_width += emitter.node_at(idx).width;
+    if (total_width > 64)
+      throw BusWidthLimitError("merge expression", total_width);
     inputs.push_back(idx);
   }
 
@@ -138,6 +168,9 @@ std::uint32_t compile_expr(const ast::Expr &expr,
 
     else if constexpr (std::is_same_v<T, ast::NotExpr>)
       return compile_not(e, symbols, emitter, parent_component);
+
+    else if constexpr (std::is_same_v<T, ast::SplitExpr>)
+      return compile_split(e, symbols, emitter, parent_component);
 
     else if constexpr (std::is_same_v<T, ast::LeftShift>)
       return compile_shift(GateType::Lsl, *e.operand, *e.shift_amount, symbols, emitter, parent_component);

@@ -38,7 +38,8 @@ Precedence increases as you go down the chain:
 expr          logic binary ops (AND / OR / XOR)     ← lowest precedence
   └─ shift_expr   shifts (<< / >>)
        └─ unary       prefix NOT
-            └─ atom        literals, var refs, parens, merges  ← highest
+            └─ postfix     postfix slice [lo:hi]
+                 └─ atom        literals, var refs, parens, merges  ← highest
 ```
 
 Rough mental model: `a AND b << 2` groups as `a AND (b << 2)` because shifts bind tighter than `AND`.
@@ -75,11 +76,25 @@ So `NOT NOT x` parses as `NOT (NOT x)`, which is the usual expectation for stack
 
 ## Ordered choice in `atom` (PEG gotcha)
 
-`atom` is an ordered choice of alternatives. The **first match wins**.
+`atom` is an ordered choice of leaf alternatives. The **first match wins**.
 
 `IDENT` must stay **after** more specific forms (parentheses, merge `{…}`, binary literal `0b…`). Otherwise any identifier-shaped token would be swallowed by `IDENT` before a dedicated rule (including future keywords or sigils) could run.
 
-For any new bracketed or sigil-led form, add a **named sub-rule** (like `merge_expr`) and list it in `atom` **before** `IDENT`.
+For any new bracketed or sigil-led leaf form, add a **named sub-rule** (like `merge_expr`) and list it in `atom` **before** `IDENT`.
+
+## Postfix operators on `postfix`
+
+`postfix` is not an ordered choice — it is `atom` followed by an **optional postfix suffix**. Currently the only suffix is the slice `[lo:hi]`:
+
+```text
+postfix <- atom ('[' INT ':' INT ']')?
+```
+
+Because postfix requires the base to be parsed first, PEG cannot express it with a choice inside the same rule (that would need left recursion). The two-level split (`postfix` / `atom`) is the standard PEG workaround.
+
+When the suffix is absent `vs.size() == 1` and `postfix` passes the `atom` Expr through unchanged. When the suffix is present `vs.size() == 3` and `postfix` wraps the base in a `SplitExpr`.
+
+To add a second postfix operator (e.g. a future type-cast), extend `postfix` with another optional suffix and handle the new `vs.size()` case in its action.
 
 ## Current expression-related rules (summary)
 
@@ -89,8 +104,9 @@ For any new bracketed or sigil-led form, add a **named sub-rule** (like `merge_e
 | `bin_operator` | `'AND' / 'OR' / 'XOR'` |
 | `shift_expr` | `unary (shift_op INT)*` — shift amount is a decimal `INT` |
 | `shift_op` | `'<<' / '>>'` |
-| `unary` | `'NOT' unary / atom` |
-| `atom` | `'(' expr ')' / merge_expr / LITERAL / IDENT` |
+| `unary` | `'NOT' unary / postfix` |
+| `postfix` | `atom ('[' INT ':' INT ']')?` — optional postfix bit-slice |
+| `atom` | `'(' expr ')' / merge_expr / LITERAL / IDENT` — ordered leaf choices |
 | `merge_expr` | `'{' expr (',' expr)+ '}'` — at least two operands |
 | `LITERAL` | Binary literal: `0b` followed by bits |
 | `IDENT`, `INT` | As documented in the grammar string |
@@ -132,6 +148,10 @@ Then extend the `unary` action with a new `vs.choice()` branch (choice indices s
 ### New terminal or composite leaf
 
 Add an alternative in `atom` **before** `IDENT`, ideally as its own rule for a clean action.
+
+### New postfix operator
+
+Extend the optional suffix group in `postfix` and add a new `vs.size()` branch in the `postfix` action. If the operator has its own distinct syntax, give it a named sub-rule (e.g. `type_cast`) so the action stays readable.
 
 ## Merge expressions
 
