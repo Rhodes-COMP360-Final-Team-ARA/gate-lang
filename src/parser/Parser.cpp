@@ -24,7 +24,7 @@ void attach_actions(peg::parser &pg) {
   /*
    * Notes for understanding how this stuff works:
    *  - Everything is a lambda that tells the parser how to deal with certain rules in the grammar
-   *  - Things with multiple parts are array based, so with IDENT ':' INT, you'd reference IDENT with vs[0] and INT with vs[1]
+   *  - Things with multiple parts are array-based, so with IDENT ':' INT, you'd reference IDENT with vs[0] and INT with vs[1]
    */
 
   // ----- Helpers to translate basic types -----
@@ -34,6 +34,14 @@ void attach_actions(peg::parser &pg) {
 
   pg["INT"] = [](const SemanticValues &vs) -> int {
     return vs.token_to_number<int>();
+  };
+
+  // LITERAL <- < '0b' [0-1]+ >
+  // token_to_string gives us the full "0b..." text; parse it as an integer.
+  pg["LITERAL"] = [](const SemanticValues &vs) -> std::uint32_t {
+    // skip the "0b" prefix and parse as binary
+    auto s = vs.token_to_string();
+    return static_cast<std::uint32_t>(std::stoul(s.substr(2), nullptr, 2));
   };
 
 
@@ -60,100 +68,107 @@ void attach_actions(peg::parser &pg) {
 
   // -- Expressions --
 
-  // bin_operator  <- 'AND' / 'OR' / 'XOR'
-  // vs.choice() returns which alternative matched (0, 1, or 2).
-  pg["bin_operator"] = [](const SemanticValues &vs) -> parser::BinOp {
-    switch (vs.choice()) {
-    case 0: return parser::BinOp::And;
-    case 1: return parser::BinOp::Or;
-    default: return parser::BinOp::Xor;
-    }
+  // Maps the choice index of the bin_operator rule (AND/OR/XOR) to an integer
+  pg["bin_operator"] = [](const SemanticValues &vs) -> int {
+    return vs.choice(); // 0=AND, 1=OR, 2=XOR
   };
 
-  // shift_op <- 'LSL' / 'LSR'
-  // vs.choice returns which alternative matched (0, or 1)
-  pg["shift_op"] = [](const SemanticValues &vs) -> parser::ShiftDir {
-   switch (vs.choice()) {
-   case 0:  return parser::ShiftDir::Left;
-   default: return parser::ShiftDir::Right;
-   }
+  // Maps the choice index of the shift_op rule (<< or >>) to a boolean flag
+  pg["shift_op"] = [](const SemanticValues &vs) -> bool {
+    return vs.choice() == 0; // true = left, false = right
   };
 
-
-  // atom <- '(' expr ')' / IDENT
-  // choice 0: parenthesized expr — just unwrap and pass through.
-  // choice 1: bare identifier — wrap the string in an Expr.
-  pg["atom"] = [](const SemanticValues &vs) -> ast::Expr {
+ // atom <- '(' expr ')' / merge_expr / LITERAL / IDENT
+ // choice 0: parenthesized — unwrap
+ // choice 1: merge_expr — already an Expr, pass through
+ // choice 2: literal — wrap the uint32 value in an Expr
+ // choice 3: identifier — wrap the string in an Expr
+ pg["atom"] = [](const SemanticValues &vs) -> ast::Expr {
     switch (vs.choice()) {
     case 0:
-      return std::any_cast<ast::Expr>(vs[0]);
+        return std::any_cast<ast::Expr>(vs[0]);
+    case 1:
+        return std::any_cast<ast::Expr>(vs[0]);  // merge_expr already returns Expr
+    case 2:
+        return ast::Expr{std::any_cast<std::uint32_t>(vs[0])};
     default:
-      return ast::Expr{std::any_cast<std::string>(vs[0])};
+        return ast::Expr{std::any_cast<std::string>(vs[0])};
     }
-  };
+ };
 
-  // unary  <- 'NOT' unary / shift_op INT unary / atom
+  // unary <- 'NOT' unary / atom
   // choice 0: the 'NOT' literal is invisible, vs[0] is the inner Expr.
   // choice 1: pass through the atom.
   pg["unary"] = [](const SemanticValues &vs) -> ast::Expr {
-     switch (vs.choice()) {
-     case 0: { // 'NOT' unary
-         auto inner = std::any_cast<ast::Expr>(vs[0]);
-         return ast::Expr{
-             ast::UnaryExpr{std::make_shared<ast::Expr>(std::move(inner))}
-         };
-     }
-     case 1: { // shiftop INT unary
-        // vs[0] is ShiftDir (from our shiftop action)
-        // vs[1] is int (from our INT action)
-        // vs[2] is the inner Expr
-        return ast::Expr{ast::ShiftExpr{
-            std::any_cast<ast::ShiftDir>(vs[0]),
-            std::any_cast<int>(vs[1]),
-            std::make_shared<ast::Expr>(std::any_cast<ast::Expr>(vs[2]))
-        }};    
+    switch (vs.choice()) {
+    case 0: {
+      auto inner = std::any_cast<ast::Expr>(vs[0]);
+      return ast::Expr{
+          ast::UnaryExpr{std::make_shared<ast::Expr>(std::move(inner))}};
     }
-        default: // atom
-        return std::any_cast<ast::Expr>(vs[0]);
+    default:
+      return std::any_cast<ast::Expr>(vs[0]);
     }
-   };
+  };
 
-  // expr <- unary (bin_operator unary)*
-  //
-  // Children arrive flat and alternating:
-  //   vs[0]=Expr, vs[1]=BinOp, vs[2]=Expr, vs[3]=BinOp, vs[4]=Expr, ...
-  //
-  // We left-fold them into a tree: for "a AND b OR c",
-  //   step 0: acc = Expr("a")
-  //   step 1: acc = BinExpr(acc, AND, Expr("b"))
-  //   step 2: acc = BinExpr(acc, OR,  Expr("c"))
+  // Implements left-associative parsing for shift operations.
+  // vs[0] is the base expression, followed by pairs of [op, integer amount].
+  pg["shift_expr"] = [](const SemanticValues &vs) -> ast::Expr {
+    auto acc = std::any_cast<ast::Expr>(vs[0]);
+    for (size_t i = 1; i < vs.size(); i += 2) {
+        bool is_left = std::any_cast<bool>(vs[i]);
+        auto amt = std::any_cast<int>(vs[i + 1]);
+        auto operand = std::make_shared<ast::Expr>(std::move(acc));
+        auto amount_expr = std::make_shared<ast::Expr>(ast::Expr{ast::Literal{static_cast<uint64_t>(amt)}});
+        if (is_left)
+            acc = ast::Expr{ast::LeftShift{std::move(operand), std::move(amount_expr)}};
+        else
+            acc = ast::Expr{ast::RightShift{std::move(operand), std::move(amount_expr)}};
+    }
+    return acc;
+  };
+
+  // merge_expr <- '{' expr (',' expr)+ '}'
+  // All children are Expr values — collect them into a MergeExpr.
+  pg["merge_expr"] = [](const SemanticValues &vs) -> ast::Expr {
+      std::vector<std::shared_ptr<ast::Expr>> parts;
+      for (const auto &v : vs)
+          parts.push_back(std::make_shared<ast::Expr>(std::any_cast<ast::Expr>(v)));
+      return ast::Expr{ast::MergeExpr{std::move(parts)}};
+  };
+
+
+  // Implements left-associative parsing for binary logic operations.
+  // vs[0] is the base expression, followed by pairs of [op_index, rhs_expression].
   pg["expr"] = [](const SemanticValues &vs) -> ast::Expr {
     auto acc = std::any_cast<ast::Expr>(vs[0]);
-
     for (size_t i = 1; i < vs.size(); i += 2) {
-      auto op = std::any_cast<ast::BinOp>(vs[i]);
-      auto rhs = std::any_cast<ast::Expr>(vs[i + 1]);
-
-      acc = ast::Expr{ast::BinExpr{
-          std::make_shared<ast::Expr>(std::move(acc)),
-          op,
-          std::make_shared<ast::Expr>(std::move(rhs)),
-      }};
+        int op = std::any_cast<int>(vs[i]);
+        auto rhs = std::any_cast<ast::Expr>(vs[i + 1]);
+        auto lhs_ptr = std::make_shared<ast::Expr>(std::move(acc));
+        auto rhs_ptr = std::make_shared<ast::Expr>(std::move(rhs));
+        switch (op) {
+        case 0: acc = ast::Expr{ast::AndExpr{lhs_ptr, rhs_ptr}}; break;
+        case 1: acc = ast::Expr{ast::OrExpr {lhs_ptr, rhs_ptr}}; break;
+        default: acc = ast::Expr{ast::XorExpr{lhs_ptr, rhs_ptr}}; break;
+        }
     }
-
     return acc;
   };
 
   // -- Helpers (same pattern as param_list) --
 
+  // Aggregates comma-separated VarInit nodes into a vector for return types.
   pg["comp_outputs"] = [](const SemanticValues &vs) -> std::vector<ast::VarInit> {
     return vs.transform<ast::VarInit>();
   };
 
+  // Aggregates comma-separated IDENT strings into a vector for function arguments.
   pg["arg_list"] = [](const SemanticValues &vs) -> std::vector<std::string> {
     return vs.transform<std::string>();
   };
 
+  // Flattens individual statement nodes into a single vector for the block body.
   pg["body"] = [](const SemanticValues &vs) -> std::vector<ast::Statement> {
     return vs.transform<ast::Statement>();
   };
