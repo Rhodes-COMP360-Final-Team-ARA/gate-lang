@@ -90,9 +90,9 @@ void attach_actions(peg::parser &pg) {
     case 1:
         return std::any_cast<ast::Expr>(vs[0]);  // merge_expr already returns Expr
     case 2:
-        return ast::Expr{std::any_cast<std::uint32_t>(vs[0])};
+        return ast::Expr{ast::Literal{static_cast<std::uint64_t>(std::any_cast<std::uint32_t>(vs[0]))}};
     default:
-        return ast::Expr{std::any_cast<std::string>(vs[0])};
+        return ast::Expr{ast::VarRef{std::any_cast<std::string>(vs[0])}};
     }
  };
 
@@ -104,7 +104,7 @@ void attach_actions(peg::parser &pg) {
     case 0: {
       auto inner = std::any_cast<ast::Expr>(vs[0]);
       return ast::Expr{
-          ast::UnaryExpr{std::make_shared<ast::Expr>(std::move(inner))}};
+          ast::NotExpr{std::make_shared<ast::Expr>(std::move(inner))}};
     }
     default:
       return std::any_cast<ast::Expr>(vs[0]);
