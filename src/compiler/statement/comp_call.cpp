@@ -2,6 +2,7 @@
 #include "compiler/statement/stmt_comp_call.hpp"
 #include "compiler/CompCache.hpp"
 #include "compiler/CompileError.hpp"
+#include "compiler/CompileExpr.hpp"
 #include "compiler/InlineGateo.hpp"
 
 namespace gate {
@@ -20,16 +21,16 @@ void stmt_comp_call(const ast::CompCall &stmt,
   if (subcomp_io_info.input_node_indices.size() != stmt.args.size())
     throw ArityMismatchError(stmt.comp + " parameters", subcomp_io_info.input_node_indices.size(), stmt.args.size());
 
-  // Loop through parameter inputs to resolve and wire
+  // Loop through parameter inputs to compile, verify, and wire
   for (size_t i = 0; i < stmt.args.size(); ++i) {
-    uint32_t wire_in_node_ind = symbols.resolve(stmt.args[i]);
+    uint32_t wire_in_node_ind = compile_expr(stmt.args[i], symbols, emitter, parent_component);
 
     const Node wire_in_node = emitter.node_at(wire_in_node_ind);
     Node& subcomp_input_node = emitter.node_at(subcomp_io_info.input_node_indices[i]);
 
     // Verify width match
     if (wire_in_node.width != subcomp_input_node.width)
-      throw WidthMismatchError(stmt.comp + ", parameter " + stmt.args[i], subcomp_input_node.width, wire_in_node.width);
+      throw WidthMismatchError(stmt.comp + ", argument " + std::to_string(i + 1), subcomp_input_node.width, wire_in_node.width);
 
     // Wire input
     subcomp_input_node.inputs = {wire_in_node_ind};

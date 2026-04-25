@@ -36,15 +36,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cpp-peglib)
 
-# --- gateo-cpp (.gateo protobuf I/O + gateo::v2::view types; target gateo::gateo) ---
-# Pinned to https://github.com/Rhodes-Gate-Lang/gateo-cpp/releases/tag/v2.0.1
-# Pulls gateo-schema v2.0.1 at configure time. Requires protoc + libprotobuf, or
+# --- gateo-cpp (.gateo protobuf I/O + gateo::v3::view types; target gateo::gateo) ---
+# Pinned to https://github.com/Rhodes-Gate-Lang/gateo-cpp/releases/tag/v3.0.0
+# Pulls gateo-schema v3.0.0 at configure time. Requires protoc + libprotobuf, or
 # -DGATEO_FETCH_PROTOBUF=ON.
 set(GATEO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
   gateo-cpp
   GIT_REPOSITORY https://github.com/Rhodes-Gate-Lang/gateo-cpp.git
-  GIT_TAG        v2.0.1
+  GIT_TAG        v3.0.0
 )
 FetchContent_MakeAvailable(gateo-cpp)
 

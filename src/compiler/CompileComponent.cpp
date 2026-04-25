@@ -21,7 +21,7 @@ GateObject compile_component(const ast::Comp &comp, CompCache &cache) {
     input_node.width = param.width;
     input_node.parent = 0; // root comp
     input_node.name = param.ident;
-    input_node.literal_value = std::nullopt; // Not applicable for input nodes
+    input_node.value = std::nullopt; // Not applicable for input nodes
 
     uint32_t ind = emitter.emit_node(input_node);
     symbols.bind(param.ident, ind);

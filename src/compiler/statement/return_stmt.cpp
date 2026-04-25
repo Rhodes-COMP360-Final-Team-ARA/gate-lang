@@ -17,7 +17,7 @@ void stmt_return(const ast::ReturnStmt &stmt,
     out_node.width = emitter.node_at(node_ind).width;
     out_node.parent = parent_component;
     out_node.name = symbol; // does this need std::move
-    out_node.literal_value = std::nullopt; // not applicable for output nodes
+    out_node.value = std::nullopt; // not applicable for output nodes
 
     emitter.emit_node(out_node);
   }

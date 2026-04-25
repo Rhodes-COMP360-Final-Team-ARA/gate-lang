@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -104,6 +105,22 @@ public:
   std::string context_name;
   int expected_width;
   int actual_width;
+};
+
+/// Thrown when a node's computed width exceeds the 64-bit schema maximum.
+/// Context string names the expression kind, e.g. "merge expression".
+class BusWidthLimitError : public CompileError {
+public:
+  BusWidthLimitError(std::string context, std::uint32_t actual_width,
+                     SourceLocation loc = {})
+      : CompileError(context + ": bus width " + std::to_string(actual_width) +
+                         " exceeds the 64-bit maximum",
+                     std::move(loc)),
+        context_name(std::move(context)),
+        actual_width(actual_width) {}
+
+  std::string context_name;
+  std::uint32_t actual_width;
 };
 
 /// Context string describes what was being counted, e.g.

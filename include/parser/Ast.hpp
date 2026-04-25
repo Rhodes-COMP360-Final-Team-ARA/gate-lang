@@ -18,25 +18,32 @@ struct VarInit {
   uint32_t width;
 };
 
-enum class BinOp { And, Or, Xor };
-
 // ── Expressions (recursive) ────────────────────────────────────────────────
 
 struct Expr;
 
-struct UnaryExpr {
-  std::shared_ptr<Expr> operand;
-};
+// Nullary Expressions
+struct VarRef { std::string name; };
+struct Literal { uint64_t bits; };
 
-struct BinExpr {
-  std::shared_ptr<Expr> lhs;
-  BinOp op;
-  std::shared_ptr<Expr> rhs;
-};
+// Unary Expressions
+struct NotExpr { std::shared_ptr<Expr> operand; };
+struct SplitExpr { std::shared_ptr<Expr> operand; int lo; int hi; };
 
+// Binary Expressions
+struct LeftShift  { std::shared_ptr<Expr> operand; std::shared_ptr<Expr> shift_amount; };
+struct RightShift { std::shared_ptr<Expr> operand; std::shared_ptr<Expr> shift_amount; };
+struct AndExpr    { std::shared_ptr<Expr> lhs; std::shared_ptr<Expr> rhs; };
+struct OrExpr     { std::shared_ptr<Expr> lhs; std::shared_ptr<Expr> rhs; };
+struct XorExpr    { std::shared_ptr<Expr> lhs; std::shared_ptr<Expr> rhs; };
+
+// N-Ary Expressions
+struct MergeExpr  { std::vector<std::shared_ptr<Expr>> operands; };
+
+// Actual EXPR splitter
 struct Expr {
-  std::variant<std::string, UnaryExpr, BinExpr> data;
-}; // TODO: Refactor to a using
+  std::variant<VarRef, Literal, NotExpr, SplitExpr, LeftShift, RightShift, AndExpr, OrExpr, XorExpr, MergeExpr> data;
+};
 
 // ── Assignments ─────────────────────────────────────────────────────────────
 
@@ -53,7 +60,7 @@ struct MutAssign {
 struct CompCall {
   std::vector<VarInit> outputs;
   std::string comp;
-  std::vector<std::string> args;
+  std::vector<Expr> args;
 };
 
 // ── Statements ──────────────────────────────────────────────────────────────
